@@ -15,11 +15,17 @@ import * as readline from "readline";
 // Config
 // ================================================================
 
-const API_BASE = "https://job-alert-api.onrender.com";
-const AUTH_FILE = path.join(os.homedir(), ".jpj-channel-auth.json");
-const MCP_CONFIG_FILE = path.join(os.homedir(), ".claude", "mcp.json");
+export const API_BASE = "https://job-alert-api.onrender.com";
+export let AUTH_FILE = path.join(os.homedir(), ".jpj-channel-auth.json");
+export let MCP_CONFIG_FILE = path.join(os.homedir(), ".claude", "mcp.json");
 
-interface AuthTokens {
+/** Override file paths (for testing only) */
+export function _setPaths(opts: { authFile?: string; mcpConfigFile?: string }) {
+  if (opts.authFile) AUTH_FILE = opts.authFile;
+  if (opts.mcpConfigFile) MCP_CONFIG_FILE = opts.mcpConfigFile;
+}
+
+export interface AuthTokens {
   session_token: string;
   refresh_token: string;
   telegram_id: number;
@@ -30,7 +36,7 @@ interface AuthTokens {
 // Auth helpers
 // ================================================================
 
-function loadTokens(): AuthTokens | null {
+export function loadTokens(): AuthTokens | null {
   try {
     if (fs.existsSync(AUTH_FILE)) {
       const data = JSON.parse(fs.readFileSync(AUTH_FILE, "utf8"));
@@ -40,8 +46,11 @@ function loadTokens(): AuthTokens | null {
   return null;
 }
 
-function saveTokens(tokens: AuthTokens): void {
-  fs.writeFileSync(AUTH_FILE, JSON.stringify(tokens, null, 2), "utf8");
+export function saveTokens(tokens: AuthTokens): void {
+  fs.writeFileSync(AUTH_FILE, JSON.stringify(tokens, null, 2), {
+    encoding: "utf8",
+    mode: 0o600, // Owner read/write only — tokens are sensitive
+  });
 }
 
 async function exchangePairingCode(code: string): Promise<AuthTokens | null> {
@@ -68,7 +77,7 @@ async function exchangePairingCode(code: string): Promise<AuthTokens | null> {
   return tokens;
 }
 
-async function refreshSession(tokens: AuthTokens): Promise<AuthTokens | null> {
+export async function refreshSession(tokens: AuthTokens): Promise<AuthTokens | null> {
   const res = await fetch(`${API_BASE}/api/channel/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -79,6 +88,7 @@ async function refreshSession(tokens: AuthTokens): Promise<AuthTokens | null> {
 
   const data = await res.json();
   tokens.session_token = data.session_token;
+  tokens.refresh_token = data.refresh_token; // Rotated refresh token
   tokens.expires_at = Date.now() + data.expires_in * 1000;
   saveTokens(tokens);
   return tokens;
@@ -171,7 +181,7 @@ function prompt(question: string): Promise<string> {
   });
 }
 
-function installMcpConfig(): void {
+export function installMcpConfig(): void {
   const claudeDir = path.join(os.homedir(), ".claude");
   if (!fs.existsSync(claudeDir)) {
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -191,7 +201,10 @@ function installMcpConfig(): void {
     args: ["github:markjrobby/jpj-channel"],
   };
 
-  fs.writeFileSync(MCP_CONFIG_FILE, JSON.stringify(config, null, 2), "utf8");
+  fs.writeFileSync(MCP_CONFIG_FILE, JSON.stringify(config, null, 2), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
 }
 
 async function runPairingFlow(): Promise<boolean> {
@@ -410,7 +423,14 @@ async function main() {
   console.error("JPJ MCP server running");
 }
 
-main().catch((e) => {
-  console.error("Fatal error:", e);
-  process.exit(1);
-});
+// Only run main when executed directly (not when imported for testing)
+const isDirectRun =
+  process.argv[1]?.endsWith("index.js") ||
+  process.argv[1]?.endsWith("index.ts");
+
+if (isDirectRun) {
+  main().catch((e) => {
+    console.error("Fatal error:", e);
+    process.exit(1);
+  });
+}
