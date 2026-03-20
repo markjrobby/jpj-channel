@@ -1,0 +1,29 @@
+{
+  "name": "jpj-channel",
+  "version": "1.0.0",
+  "description": "Claude Code MCP server for JPJ AI-powered job scoring",
+  "type": "module",
+  "bin": {
+    "jpj-channel": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.37",
+    "typescript": "^5.9.3"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markjrobby/jpj-channel.git"
+  }
+}
