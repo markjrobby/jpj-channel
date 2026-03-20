@@ -403,20 +403,65 @@ function createServer(): Server {
 // Main
 // ================================================================
 
+async function isSessionValid(tokens: AuthTokens): Promise<boolean> {
+  /** Check if stored tokens are still valid by hitting the API. */
+  try {
+    const res = await fetch(`${API_BASE}/api/channel/feed`, {
+      headers: { Authorization: `Bearer ${tokens.session_token}` },
+    });
+    if (res.status === 401) {
+      // Try refresh
+      const refreshed = await refreshSession(tokens);
+      return refreshed !== null;
+    }
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function isInteractiveTerminal(): boolean {
+  /** Detect if running in a terminal (user ran npx) vs as MCP server (Claude Code spawned). */
+  return process.stdin.isTTY === true;
+}
+
 async function main() {
   const args = process.argv.slice(2);
-
-  // If no tokens exist, run pairing flow
+  const wantsPair = args.includes("--pair");
   const tokens = loadTokens();
 
-  if (!tokens || args.includes("--pair")) {
-    const success = await runPairingFlow();
-    if (!success) process.exit(1);
-    if (args.includes("--pair")) process.exit(0);
-    // After pairing in non-pair mode, continue to start server
+  // If running interactively (user typed npx), show pairing flow
+  if (isInteractiveTerminal()) {
+    if (!tokens || wantsPair) {
+      // No tokens or explicit --pair: run pairing
+      const success = await runPairingFlow();
+      if (!success) process.exit(1);
+      process.exit(0);
+    }
+
+    // Tokens exist — verify they still work
+    console.error("");
+    console.error("  JPJ Channel — checking session...");
+    const valid = await isSessionValid(tokens);
+
+    if (!valid) {
+      console.error("  Session expired or revoked. Let's re-pair.");
+      console.error("");
+      const success = await runPairingFlow();
+      if (!success) process.exit(1);
+      process.exit(0);
+    }
+
+    console.error("  ✓ Already paired and session is valid.");
+    console.error("  MCP server is configured in ~/.claude/mcp.json");
+    console.error("  Restart Claude Code, then ask Claude to check your jobs.");
+    console.error("");
+    console.error("  To re-pair: npx github:markjrobby/jpj-channel --pair");
+    console.error("");
+    process.exit(0);
   }
 
-  // Start MCP server
+  // Non-interactive: launched by Claude Code as MCP server
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
