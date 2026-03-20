@@ -416,7 +416,9 @@ function createServer(): Server {
           jobs: feed.jobs,
           instructions:
             `Score each job 0-100 based on fit with the resume above. ` +
-            `Use action "send" for score >= ${feed.ai_threshold}, "skip" otherwise. ` +
+            `Weight transferable skills and adjacent experience — don't penalise heavily for unfamiliar domains if core competencies align. ` +
+            `For borderline jobs (score ${feed.ai_threshold - 10}-${feed.ai_threshold - 1}): lean toward sending, but set action to "send" and explain in match_reason why it's worth a look despite the lower score (e.g. "Borderline — scored below threshold but [specific reason]"). ` +
+            `Use action "send" for score >= ${feed.ai_threshold} OR for borderline sends as described above, "skip" otherwise. ` +
             `Then call submit_scores with the batch_id and all scores.`,
         };
 
