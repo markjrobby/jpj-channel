@@ -402,8 +402,10 @@ async function main() {
     console.error("JPJ MCP server running");
 }
 // Only run main when executed directly (not when imported for testing)
+// npx resolves argv[1] to the bin symlink (e.g. "jpj-channel"), not "index.js"
 const isDirectRun = process.argv[1]?.endsWith("index.js") ||
-    process.argv[1]?.endsWith("index.ts");
+    process.argv[1]?.endsWith("index.ts") ||
+    process.argv[1]?.endsWith("jpj-channel");
 if (isDirectRun) {
     main().catch((e) => {
         console.error("Fatal error:", e);
