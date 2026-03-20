@@ -89,30 +89,20 @@ describe("installMcpConfig", () => {
     afterEach(() => {
         fs.rmSync(tmpDir, { recursive: true, force: true });
     });
-    it("creates missing .claude directory", () => {
-        const claudeDir = path.join(tmpDir, ".claude");
-        const mcpFile = path.join(claudeDir, "mcp.json");
-        // Override both paths — installMcpConfig reads os.homedir() internally,
-        // but MCP_CONFIG_FILE is what it actually uses for the file path.
-        // We also need the claudeDir to match. We'll override MCP_CONFIG_FILE
-        // and also need to ensure the dir derivation works. Since installMcpConfig
-        // uses path.join(os.homedir(), ".claude") for the dir, we mock at the
-        // file level: create a custom config path under tmpDir.
+    it("creates config file when it does not exist", () => {
+        const mcpFile = path.join(tmpDir, ".claude.json");
         _setPaths({ mcpConfigFile: mcpFile });
-        // The dir doesn't exist yet
-        assert.equal(fs.existsSync(claudeDir), false);
-        // installMcpConfig creates claudeDir from os.homedir(), which we can't
-        // easily override. Instead, create the directory manually to test the
-        // config-writing logic, and test dir creation separately.
-        fs.mkdirSync(claudeDir, { recursive: true });
+        assert.equal(fs.existsSync(mcpFile), false);
         installMcpConfig();
         assert.equal(fs.existsSync(mcpFile), true);
+        const result = JSON.parse(fs.readFileSync(mcpFile, "utf8"));
+        assert.deepEqual(result.mcpServers["jpj"], {
+            command: "npx",
+            args: ["github:markjrobby/jpj-channel"],
+        });
     });
     it("preserves existing mcpServers entries", () => {
-        const claudeDir = path.join(tmpDir, ".claude");
-        fs.mkdirSync(claudeDir, { recursive: true });
-        const mcpFile = path.join(claudeDir, "mcp.json");
-        // Write an existing config with another server
+        const mcpFile = path.join(tmpDir, ".claude.json");
         const existing = {
             mcpServers: {
                 "my-other-server": {
@@ -136,14 +126,15 @@ describe("installMcpConfig", () => {
             args: ["github:markjrobby/jpj-channel"],
         });
     });
-    it("handles empty existing config file", () => {
-        const claudeDir = path.join(tmpDir, ".claude");
-        fs.mkdirSync(claudeDir, { recursive: true });
-        const mcpFile = path.join(claudeDir, "mcp.json");
-        fs.writeFileSync(mcpFile, "{}");
+    it("preserves non-MCP settings in claude.json", () => {
+        const mcpFile = path.join(tmpDir, ".claude.json");
+        const existing = { numStartups: 100, theme: "dark" };
+        fs.writeFileSync(mcpFile, JSON.stringify(existing));
         _setPaths({ mcpConfigFile: mcpFile });
         installMcpConfig();
         const result = JSON.parse(fs.readFileSync(mcpFile, "utf8"));
+        assert.equal(result.numStartups, 100);
+        assert.equal(result.theme, "dark");
         assert.deepEqual(result.mcpServers["jpj"], {
             command: "npx",
             args: ["github:markjrobby/jpj-channel"],

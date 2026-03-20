@@ -17,7 +17,7 @@ import * as readline from "readline";
 
 export const API_BASE = "https://job-alert-api.onrender.com";
 export let AUTH_FILE = path.join(os.homedir(), ".jpj-channel-auth.json");
-export let MCP_CONFIG_FILE = path.join(os.homedir(), ".claude", "mcp.json");
+export let MCP_CONFIG_FILE = path.join(os.homedir(), ".claude.json");
 
 /** Override file paths (for testing only) */
 export function _setPaths(opts: { authFile?: string; mcpConfigFile?: string }) {
@@ -182,11 +182,6 @@ function prompt(question: string): Promise<string> {
 }
 
 export function installMcpConfig(): void {
-  const claudeDir = path.join(os.homedir(), ".claude");
-  if (!fs.existsSync(claudeDir)) {
-    fs.mkdirSync(claudeDir, { recursive: true });
-  }
-
   let config: any = {};
   if (fs.existsSync(MCP_CONFIG_FILE)) {
     try {
@@ -236,7 +231,7 @@ async function runPairingFlow(): Promise<boolean> {
 
   // Install MCP config
   installMcpConfig();
-  console.error("  MCP server config written to ~/.claude/mcp.json");
+  console.error("  MCP server config written to ~/.claude.json");
   console.error("");
   console.error("  Done! JPJ is now connected to Claude Code.");
   console.error("  Restart Claude Code, then ask Claude to check your jobs.");
@@ -453,7 +448,7 @@ async function main() {
     }
 
     console.error("  ✓ Already paired and session is valid.");
-    console.error("  MCP server is configured in ~/.claude/mcp.json");
+    console.error("  MCP server is configured in ~/.claude.json");
     console.error("  Restart Claude Code, then ask Claude to check your jobs.");
     console.error("");
     console.error("  To re-pair: npx github:markjrobby/jpj-channel --pair");
