@@ -245,7 +245,8 @@ function createServer() {
                                     },
                                     match_reason: {
                                         type: "string",
-                                        description: "1-2 sentence explanation of why this is/isn't a good fit",
+                                        maxLength: 300,
+                                        description: "1-2 sentence explanation of why this is/isn't a good fit (max 300 chars)",
                                     },
                                 },
                                 required: ["job_id", "score", "action", "match_reason"],
