@@ -18,11 +18,13 @@ import * as readline from "readline";
 export const API_BASE = "https://job-alert-api.onrender.com";
 export let AUTH_FILE = path.join(os.homedir(), ".jpj-channel-auth.json");
 export let MCP_CONFIG_FILE = path.join(os.homedir(), ".claude.json");
+export let SETTINGS_FILE = path.join(os.homedir(), ".claude", "settings.json");
 
 /** Override file paths (for testing only) */
-export function _setPaths(opts: { authFile?: string; mcpConfigFile?: string }) {
+export function _setPaths(opts: { authFile?: string; mcpConfigFile?: string; settingsFile?: string }) {
   if (opts.authFile) AUTH_FILE = opts.authFile;
   if (opts.mcpConfigFile) MCP_CONFIG_FILE = opts.mcpConfigFile;
+  if (opts.settingsFile) SETTINGS_FILE = opts.settingsFile;
 }
 
 export interface AuthTokens {
@@ -202,6 +204,47 @@ export function installMcpConfig(): void {
   });
 }
 
+const JPJ_TOOLS = ["mcp__jpj__check_jobs", "mcp__jpj__submit_scores"];
+
+export function toolPermissionsInstalled(): boolean {
+  try {
+    if (!fs.existsSync(SETTINGS_FILE)) return false;
+    const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+    const allow: string[] = settings?.permissions?.allow ?? [];
+    return JPJ_TOOLS.every((t) => allow.includes(t));
+  } catch {
+    return false;
+  }
+}
+
+export function installToolPermissions(): void {
+  const dir = path.dirname(SETTINGS_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  let settings: any = {};
+  if (fs.existsSync(SETTINGS_FILE)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+    } catch {}
+  }
+
+  if (!settings.permissions) settings.permissions = {};
+  if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = [];
+
+  for (const tool of JPJ_TOOLS) {
+    if (!settings.permissions.allow.includes(tool)) {
+      settings.permissions.allow.push(tool);
+    }
+  }
+
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+}
+
 async function runPairingFlow(): Promise<boolean> {
   console.error("");
   console.error("  JPJ Channel — AI-Powered Job Scoring");
@@ -226,13 +269,40 @@ async function runPairingFlow(): Promise<boolean> {
     return false;
   }
 
-  console.error(`  Paired successfully (Telegram ID: ${tokens.telegram_id})`);
+  console.error(`  ✓ Paired successfully (Telegram ID: ${tokens.telegram_id})`);
   console.error("");
 
   // Install MCP config
   installMcpConfig();
-  console.error("  MCP server config written to ~/.claude.json");
+  console.error("  ✓ MCP server config written to ~/.claude.json");
   console.error("");
+
+  // Tool permissions
+  if (!toolPermissionsInstalled()) {
+    console.error("  ┌─────────────────────────────────────────────┐");
+    console.error("  │  Tool Permissions                           │");
+    console.error("  └─────────────────────────────────────────────┘");
+    console.error("");
+    console.error("  JPJ needs two tools to run automatically:");
+    console.error("");
+    console.error("    ✓ check_jobs     — Fetches new jobs + your resume (read-only)");
+    console.error("    ✓ submit_scores  — Sends scores back, triggers Telegram alerts");
+    console.error("");
+    console.error("  Allowing these means Claude Code won't ask for");
+    console.error("  approval each time it scores jobs for you.");
+    console.error("");
+
+    const answer = await prompt("  Allow these tools? (y/n): ");
+
+    if (answer.toLowerCase() === "y" || answer.toLowerCase() === "yes") {
+      installToolPermissions();
+      console.error("  ✓ Tool permissions saved to ~/.claude/settings.json");
+    } else {
+      console.error("  Skipped. You'll be prompted each time Claude uses JPJ tools.");
+    }
+    console.error("");
+  }
+
   console.error("  Done! JPJ is now connected to Claude Code.");
   console.error("  Restart Claude Code, then ask Claude to check your jobs.");
   console.error("");
@@ -450,8 +520,30 @@ async function main() {
 
     console.error("  ✓ Already paired and session is valid.");
     console.error("  MCP server is configured in ~/.claude.json");
-    console.error("  Restart Claude Code, then ask Claude to check your jobs.");
+
+    if (!toolPermissionsInstalled()) {
+      console.error("");
+      console.error("  Tool permissions not yet configured.");
+      console.error("  JPJ needs two tools to run without approval prompts:");
+      console.error("");
+      console.error("    ✓ check_jobs     — Fetches new jobs + your resume (read-only)");
+      console.error("    ✓ submit_scores  — Sends scores back, triggers Telegram alerts");
+      console.error("");
+
+      const answer = await prompt("  Allow these tools? (y/n): ");
+
+      if (answer.toLowerCase() === "y" || answer.toLowerCase() === "yes") {
+        installToolPermissions();
+        console.error("  ✓ Tool permissions saved to ~/.claude/settings.json");
+      } else {
+        console.error("  Skipped. You'll be prompted each time Claude uses JPJ tools.");
+      }
+    } else {
+      console.error("  ✓ Tool permissions configured.");
+    }
+
     console.error("");
+    console.error("  Restart Claude Code, then ask Claude to check your jobs.");
     console.error("  To re-pair: npx github:markjrobby/jpj-channel --pair");
     console.error("");
     process.exit(0);

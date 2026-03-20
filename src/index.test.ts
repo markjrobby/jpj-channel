@@ -9,6 +9,8 @@ import {
   loadTokens,
   saveTokens,
   installMcpConfig,
+  installToolPermissions,
+  toolPermissionsInstalled,
   refreshSession,
   type AuthTokens,
 } from "./index.js";
@@ -180,6 +182,191 @@ describe("installMcpConfig", () => {
       command: "npx",
       args: ["github:markjrobby/jpj-channel"],
     });
+  });
+});
+
+describe("toolPermissionsInstalled", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    _setPaths({ settingsFile: path.join(tmpDir, "settings.json") });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns false when settings file does not exist", () => {
+    assert.equal(toolPermissionsInstalled(), false);
+  });
+
+  it("returns false when allow list is empty", () => {
+    const settingsFile = path.join(tmpDir, "settings.json");
+    fs.writeFileSync(settingsFile, JSON.stringify({ permissions: { allow: [] } }));
+    assert.equal(toolPermissionsInstalled(), false);
+  });
+
+  it("returns false when only one tool is present", () => {
+    const settingsFile = path.join(tmpDir, "settings.json");
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({ permissions: { allow: ["mcp__jpj__check_jobs"] } })
+    );
+    assert.equal(toolPermissionsInstalled(), false);
+  });
+
+  it("returns true when both tools are present", () => {
+    const settingsFile = path.join(tmpDir, "settings.json");
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({
+        permissions: {
+          allow: ["mcp__jpj__check_jobs", "mcp__jpj__submit_scores"],
+        },
+      })
+    );
+    assert.equal(toolPermissionsInstalled(), true);
+  });
+
+  it("returns true when both tools are present among others", () => {
+    const settingsFile = path.join(tmpDir, "settings.json");
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({
+        permissions: {
+          allow: [
+            "mcp__other__tool",
+            "mcp__jpj__check_jobs",
+            "mcp__jpj__submit_scores",
+            "Bash(git:*)",
+          ],
+        },
+      })
+    );
+    assert.equal(toolPermissionsInstalled(), true);
+  });
+
+  it("returns false for corrupt JSON", () => {
+    const settingsFile = path.join(tmpDir, "settings.json");
+    fs.writeFileSync(settingsFile, "not-json{{{");
+    assert.equal(toolPermissionsInstalled(), false);
+  });
+});
+
+describe("installToolPermissions", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    _setPaths({ settingsFile: path.join(tmpDir, "settings.json") });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("creates settings file when it does not exist", () => {
+    const settingsFile = path.join(tmpDir, "settings.json");
+    assert.equal(fs.existsSync(settingsFile), false);
+
+    installToolPermissions();
+
+    assert.equal(fs.existsSync(settingsFile), true);
+    const result = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+    assert.deepEqual(result.permissions.allow, [
+      "mcp__jpj__check_jobs",
+      "mcp__jpj__submit_scores",
+    ]);
+  });
+
+  it("preserves existing permissions", () => {
+    const settingsFile = path.join(tmpDir, "settings.json");
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({
+        permissions: { allow: ["Bash(git:*)", "mcp__render__list_services"] },
+      })
+    );
+
+    installToolPermissions();
+
+    const result = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+    assert.deepEqual(result.permissions.allow, [
+      "Bash(git:*)",
+      "mcp__render__list_services",
+      "mcp__jpj__check_jobs",
+      "mcp__jpj__submit_scores",
+    ]);
+  });
+
+  it("does not duplicate tools if already present", () => {
+    const settingsFile = path.join(tmpDir, "settings.json");
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({
+        permissions: { allow: ["mcp__jpj__check_jobs"] },
+      })
+    );
+
+    installToolPermissions();
+
+    const result = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+    const jpjTools = result.permissions.allow.filter((t: string) =>
+      t.startsWith("mcp__jpj__")
+    );
+    assert.equal(jpjTools.length, 2);
+    assert.deepEqual(result.permissions.allow, [
+      "mcp__jpj__check_jobs",
+      "mcp__jpj__submit_scores",
+    ]);
+  });
+
+  it("preserves non-permissions settings", () => {
+    const settingsFile = path.join(tmpDir, "settings.json");
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({ theme: "dark", verbose: true })
+    );
+
+    installToolPermissions();
+
+    const result = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+    assert.equal(result.theme, "dark");
+    assert.equal(result.verbose, true);
+    assert.deepEqual(result.permissions.allow, [
+      "mcp__jpj__check_jobs",
+      "mcp__jpj__submit_scores",
+    ]);
+  });
+
+  it("creates parent directory if it does not exist", () => {
+    const nested = path.join(tmpDir, "subdir", "settings.json");
+    _setPaths({ settingsFile: nested });
+
+    installToolPermissions();
+
+    assert.equal(fs.existsSync(nested), true);
+    const result = JSON.parse(fs.readFileSync(nested, "utf8"));
+    assert.deepEqual(result.permissions.allow, [
+      "mcp__jpj__check_jobs",
+      "mcp__jpj__submit_scores",
+    ]);
+  });
+
+  it("writes file with 0o600 permissions", () => {
+    installToolPermissions();
+
+    const settingsFile = path.join(tmpDir, "settings.json");
+    const stat = fs.statSync(settingsFile);
+    const mode = stat.mode & 0o777;
+    assert.equal(mode, 0o600, `Expected mode 0600, got ${mode.toString(8)}`);
+  });
+
+  it("results in toolPermissionsInstalled returning true", () => {
+    assert.equal(toolPermissionsInstalled(), false);
+    installToolPermissions();
+    assert.equal(toolPermissionsInstalled(), true);
   });
 });
 
