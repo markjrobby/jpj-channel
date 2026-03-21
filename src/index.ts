@@ -10,7 +10,6 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as readline from "readline";
-import { spawn } from "child_process";
 
 // ================================================================
 // Config
@@ -34,6 +33,11 @@ export interface AuthTokens {
   telegram_id: number;
   expires_at: number; // unix timestamp
 }
+
+// Polling config
+const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_BACKOFF_MS = 15 * 60 * 1000;  // 15 minutes
+const BACKOFF_MULTIPLIER = 2;
 
 // ================================================================
 // Auth helpers
@@ -207,18 +211,6 @@ export function installMcpConfig(): void {
 
 const JPJ_TOOLS = ["mcp__jpj__check_jobs", "mcp__jpj__submit_scores"];
 
-const SLASH_COMMAND_DIR = path.join(os.homedir(), ".claude", "commands");
-const SLASH_COMMAND_FILE = path.join(SLASH_COMMAND_DIR, "score-jobs.md");
-
-const SLASH_COMMAND_CONTENT = `Check for pending JPJ jobs using check_jobs. If there are jobs to score, evaluate each one against the resume and submit all scores using submit_scores. If no jobs are pending, say "No new jobs" and stop.`;
-
-export function installSlashCommand(): void {
-  if (!fs.existsSync(SLASH_COMMAND_DIR)) {
-    fs.mkdirSync(SLASH_COMMAND_DIR, { recursive: true });
-  }
-  fs.writeFileSync(SLASH_COMMAND_FILE, SLASH_COMMAND_CONTENT, { encoding: "utf8" });
-}
-
 export function toolPermissionsInstalled(): boolean {
   try {
     if (!fs.existsSync(SETTINGS_FILE)) return false;
@@ -285,11 +277,9 @@ async function runPairingFlow(): Promise<boolean> {
   console.error(`  ✓ Paired successfully (Telegram ID: ${tokens.telegram_id})`);
   console.error("");
 
-  // Install MCP config + slash command
+  // Install MCP config
   installMcpConfig();
   console.error("  ✓ MCP server config written to ~/.claude.json");
-  installSlashCommand();
-  console.error("  ✓ Slash command /score-jobs installed");
   console.error("");
 
   // Tool permissions
@@ -298,10 +288,10 @@ async function runPairingFlow(): Promise<boolean> {
     console.error("  │  Tool Permissions                           │");
     console.error("  └─────────────────────────────────────────────┘");
     console.error("");
-    console.error("  JPJ needs two tools to run automatically:");
+    console.error("  JPJ needs one tool to submit scores:");
     console.error("");
-    console.error("    ✓ check_jobs     — Fetches new jobs + your resume (read-only)");
     console.error("    ✓ submit_scores  — Sends scores back, triggers Telegram alerts");
+    console.error("    ✓ check_jobs     — Manual fallback to fetch jobs (read-only)");
     console.error("");
     console.error("  Allowing these means Claude Code won't ask for");
     console.error("  approval each time it scores jobs for you.");
@@ -320,48 +310,128 @@ async function runPairingFlow(): Promise<boolean> {
 
   console.error("  Done! JPJ is now connected to Claude Code.");
   console.error("");
-
-  const startNow = await prompt("  Start scoring jobs now? (y/n): ");
-
-  if (startNow.toLowerCase() === "y" || startNow.toLowerCase() === "yes") {
-    console.error("");
-    console.error("  Launching Claude Code...");
-    console.error("");
-    launchClaudeWithLoop();
-  } else {
-    console.error("");
-    console.error("  To start later, run this in Claude Code:");
-    console.error("");
-    console.error("    /loop 1h /score-jobs");
-    console.error("");
-  }
+  console.error("  Jobs will be scored automatically while Claude Code");
+  console.error("  is running. No action needed — just leave it open.");
+  console.error("");
+  console.error("  Note: Requires Claude Code v2.1.80+ with channels enabled.");
+  console.error("");
 
   return true;
 }
 
-function launchClaudeWithLoop(): void {
-  const child = spawn("claude", ["--prompt", "/loop 1h /score-jobs"], {
-    stdio: "inherit",
-    shell: true,
-  });
+// ================================================================
+// Channel: Polling loop
+// ================================================================
 
-  child.on("error", () => {
-    console.error("  Could not launch Claude Code.");
-    console.error("  Make sure it's installed, then run:");
-    console.error("");
-    console.error("    /loop 1h /score-jobs");
-    console.error("");
-  });
+function formatJobsNotification(feed: any): string {
+  const lines: string[] = [];
+  lines.push(`batch_id: ${feed.batch_id}`);
+  lines.push(`ai_threshold: ${feed.ai_threshold}`);
+  lines.push(`job_count: ${feed.jobs.length}`);
+  lines.push("");
+  lines.push("=== RESUME ===");
+  lines.push(typeof feed.resume === "string" ? feed.resume : JSON.stringify(feed.resume, null, 2));
+  lines.push("");
+  lines.push("=== JOBS ===");
+  for (const job of feed.jobs) {
+    lines.push(`--- Job ID: ${job.job_id} ---`);
+    lines.push(`Title: ${job.title}`);
+    lines.push(`Company: ${job.company}`);
+    if (job.location) lines.push(`Location: ${job.location}`);
+    if (job.posted_date) lines.push(`Posted: ${job.posted_date}`);
+    if (job.url) lines.push(`URL: ${job.url}`);
+    lines.push("");
+    lines.push(job.description || "");
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+async function startPollingLoop(server: Server): Promise<void> {
+  let consecutiveErrors = 0;
+
+  function getNextDelay(): number {
+    if (consecutiveErrors === 0) return POLL_INTERVAL_MS;
+    return Math.min(
+      POLL_INTERVAL_MS * Math.pow(BACKOFF_MULTIPLIER, consecutiveErrors),
+      MAX_BACKOFF_MS
+    );
+  }
+
+  async function poll(): Promise<void> {
+    try {
+      const tokens = await getValidTokens();
+      if (!tokens) {
+        console.error("JPJ: No valid tokens — pairing required. Stopping poll.");
+        return; // Stop polling, user needs to re-pair
+      }
+
+      const feed = await fetchFeed(tokens);
+
+      if (feed.jobs && feed.jobs.length > 0) {
+        console.error(`JPJ: ${feed.jobs.length} new jobs — pushing to Claude`);
+
+        await server.notification({
+          method: "notifications/claude/channel" as any,
+          params: {
+            content: formatJobsNotification(feed),
+            meta: {
+              batch_id: feed.batch_id,
+              job_count: String(feed.jobs.length),
+              ai_threshold: String(feed.ai_threshold),
+            },
+          },
+        });
+
+        consecutiveErrors = 0;
+      } else {
+        console.error("JPJ: No pending jobs");
+        consecutiveErrors = 0;
+      }
+    } catch (e: any) {
+      consecutiveErrors++;
+      console.error(`JPJ: Poll error (attempt ${consecutiveErrors}): ${e.message}`);
+    }
+
+    // Schedule next poll
+    const delay = getNextDelay();
+    console.error(`JPJ: Next poll in ${Math.round(delay / 1000)}s`);
+    setTimeout(poll, delay);
+  }
+
+  // First poll after a short delay to let the connection settle
+  setTimeout(poll, 5000);
 }
 
 // ================================================================
-// MCP Server
+// MCP Server (Channel)
 // ================================================================
+
+const CHANNEL_INSTRUCTIONS = `You are connected to JPJ (JustPostedJobs), a job alert channel.
+
+New jobs arrive automatically as <channel> events. When you receive one:
+
+1. Read the resume and jobs from the notification
+2. Score each job 0-100 based on fit with the resume
+3. Weight transferable skills and adjacent experience — don't penalise heavily for unfamiliar domains if core competencies align
+4. For borderline jobs (within 10 points of the threshold): lean toward sending, and explain why in match_reason
+5. Call submit_scores with the batch_id and all scores
+
+Use action "send" for jobs at or above ai_threshold, "skip" otherwise.
+Each match needs: job_id, score (0-100), action ("send" or "skip"), match_reason (1-2 sentences, max 300 chars).
+
+Jobs you mark "send" are delivered as Telegram alerts. Jobs you "skip" are silently filtered.`;
 
 function createServer(): Server {
   const server = new Server(
-    { name: "jpj", version: "1.0.0" },
-    { capabilities: { tools: {} } }
+    { name: "jpj", version: "2.0.0" },
+    {
+      capabilities: {
+        experimental: { "claude/channel": {} },
+        tools: {},
+      },
+      instructions: CHANNEL_INSTRUCTIONS,
+    }
   );
 
   // List tools
@@ -370,7 +440,7 @@ function createServer(): Server {
       {
         name: "check_jobs",
         description:
-          "Fetch pending jobs from JPJ that need scoring. Returns jobs with titles, companies, descriptions, and the user's resume for comparison. Score each job 0-100 for fit.",
+          "Manual fallback: fetch pending jobs from JPJ. Normally jobs are pushed automatically via channel notifications. Use this only if you need to manually check for jobs.",
         inputSchema: {
           type: "object" as const,
           properties: {},
@@ -386,7 +456,7 @@ function createServer(): Server {
           properties: {
             batch_id: {
               type: "string",
-              description: "The batch_id from check_jobs response",
+              description: "The batch_id from the channel notification or check_jobs response",
             },
             matches: {
               type: "array",
@@ -445,7 +515,7 @@ function createServer(): Server {
             content: [
               {
                 type: "text" as const,
-                text: "No pending jobs to score right now. Check back later.",
+                text: "No pending jobs to score right now.",
               },
             ],
           };
@@ -565,15 +635,15 @@ async function main() {
     }
 
     console.error("  ✓ Already paired and session is valid.");
-    console.error("  MCP server is configured in ~/.claude.json");
+    console.error("  ✓ MCP server is configured in ~/.claude.json");
 
     if (!toolPermissionsInstalled()) {
       console.error("");
       console.error("  Tool permissions not yet configured.");
-      console.error("  JPJ needs two tools to run without approval prompts:");
+      console.error("  JPJ needs these tools to run without approval prompts:");
       console.error("");
-      console.error("    ✓ check_jobs     — Fetches new jobs + your resume (read-only)");
       console.error("    ✓ submit_scores  — Sends scores back, triggers Telegram alerts");
+      console.error("    ✓ check_jobs     — Manual fallback to fetch jobs (read-only)");
       console.error("");
 
       const answer = await prompt("  Allow these tools? (y/n): ");
@@ -588,21 +658,21 @@ async function main() {
       console.error("  ✓ Tool permissions configured.");
     }
 
-    // Ensure slash command exists (may be missing from older installs)
-    installSlashCommand();
-
     console.error("");
-    console.error("  In Claude Code, run:  /loop 1h /score-jobs");
-    console.error("  To re-pair:           npx github:markjrobby/jpj-channel --pair");
+    console.error("  Jobs are scored automatically while Claude Code is running.");
+    console.error("  To re-pair: npx github:markjrobby/jpj-channel --pair");
     console.error("");
     process.exit(0);
   }
 
-  // Non-interactive: launched by Claude Code as MCP server
+  // Non-interactive: launched by Claude Code as MCP server + channel
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("JPJ MCP server running");
+  console.error("JPJ channel running — polling every 5 minutes");
+
+  // Start the polling loop to push jobs as channel notifications
+  await startPollingLoop(server);
 }
 
 // Only run main when executed directly (not when imported for testing)
