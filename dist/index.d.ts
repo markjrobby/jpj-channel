@@ -19,5 +19,6 @@ export declare function loadTokens(): AuthTokens | null;
 export declare function saveTokens(tokens: AuthTokens): void;
 export declare function refreshSession(tokens: AuthTokens): Promise<AuthTokens | null>;
 export declare function installMcpConfig(): void;
+export declare function installSlashCommand(): void;
 export declare function toolPermissionsInstalled(): boolean;
 export declare function installToolPermissions(): void;

@@ -6,6 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as readline from "readline";
+import { spawn } from "child_process";
 // ================================================================
 // Config
 // ================================================================
@@ -174,6 +175,15 @@ export function installMcpConfig() {
     });
 }
 const JPJ_TOOLS = ["mcp__jpj__check_jobs", "mcp__jpj__submit_scores"];
+const SLASH_COMMAND_DIR = path.join(os.homedir(), ".claude", "commands");
+const SLASH_COMMAND_FILE = path.join(SLASH_COMMAND_DIR, "score-jobs.md");
+const SLASH_COMMAND_CONTENT = `Check for pending JPJ jobs using check_jobs. If there are jobs to score, evaluate each one against the resume and submit all scores using submit_scores. If no jobs are pending, say "No new jobs" and stop.`;
+export function installSlashCommand() {
+    if (!fs.existsSync(SLASH_COMMAND_DIR)) {
+        fs.mkdirSync(SLASH_COMMAND_DIR, { recursive: true });
+    }
+    fs.writeFileSync(SLASH_COMMAND_FILE, SLASH_COMMAND_CONTENT, { encoding: "utf8" });
+}
 export function toolPermissionsInstalled() {
     try {
         if (!fs.existsSync(SETTINGS_FILE))
@@ -233,9 +243,11 @@ async function runPairingFlow() {
     }
     console.error(`  ✓ Paired successfully (Telegram ID: ${tokens.telegram_id})`);
     console.error("");
-    // Install MCP config
+    // Install MCP config + slash command
     installMcpConfig();
     console.error("  ✓ MCP server config written to ~/.claude.json");
+    installSlashCommand();
+    console.error("  ✓ Slash command /score-jobs installed");
     console.error("");
     // Tool permissions
     if (!toolPermissionsInstalled()) {
@@ -262,9 +274,35 @@ async function runPairingFlow() {
         console.error("");
     }
     console.error("  Done! JPJ is now connected to Claude Code.");
-    console.error("  Restart Claude Code, then ask Claude to check your jobs.");
     console.error("");
+    const startNow = await prompt("  Start scoring jobs now? (y/n): ");
+    if (startNow.toLowerCase() === "y" || startNow.toLowerCase() === "yes") {
+        console.error("");
+        console.error("  Launching Claude Code...");
+        console.error("");
+        launchClaudeWithLoop();
+    }
+    else {
+        console.error("");
+        console.error("  To start later, run this in Claude Code:");
+        console.error("");
+        console.error("    /loop 1h /score-jobs");
+        console.error("");
+    }
     return true;
+}
+function launchClaudeWithLoop() {
+    const child = spawn("claude", ["--prompt", "/loop 1h /score-jobs"], {
+        stdio: "inherit",
+        shell: true,
+    });
+    child.on("error", () => {
+        console.error("  Could not launch Claude Code.");
+        console.error("  Make sure it's installed, then run:");
+        console.error("");
+        console.error("    /loop 1h /score-jobs");
+        console.error("");
+    });
 }
 // ================================================================
 // MCP Server
@@ -474,9 +512,11 @@ async function main() {
         else {
             console.error("  ✓ Tool permissions configured.");
         }
+        // Ensure slash command exists (may be missing from older installs)
+        installSlashCommand();
         console.error("");
-        console.error("  Restart Claude Code, then ask Claude to check your jobs.");
-        console.error("  To re-pair: npx github:markjrobby/jpj-channel --pair");
+        console.error("  In Claude Code, run:  /loop 1h /score-jobs");
+        console.error("  To re-pair:           npx github:markjrobby/jpj-channel --pair");
         console.error("");
         process.exit(0);
     }
