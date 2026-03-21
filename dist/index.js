@@ -217,15 +217,17 @@ export function installToolPermissions() {
         mode: 0o600,
     });
 }
-async function runPairingFlow() {
-    console.error("");
-    console.error("  JPJ Channel — AI-Powered Job Scoring");
-    console.error("  =====================================");
-    console.error("");
-    console.error("  Step 1: Send /pair to the JPJ Telegram bot");
-    console.error("  Step 2: Enter the 6-digit code below");
-    console.error("");
-    const code = await prompt("  Pairing code: ");
+async function runPairingFlow(code) {
+    // If no code passed as argument, prompt for it
+    if (!code) {
+        console.error("");
+        console.error("  JPJ Channel — AI-Powered Job Scoring");
+        console.error("  =====================================");
+        console.error("");
+        console.error("  Enter the 6-digit code from /pair on Telegram:");
+        console.error("");
+        code = await prompt("  Pairing code: ");
+    }
     if (!/^\d{6}$/.test(code)) {
         console.error("  Invalid code. Must be 6 digits.");
         return false;
@@ -236,71 +238,19 @@ async function runPairingFlow() {
         console.error("  Pairing failed. Code may be expired — send /pair again.");
         return false;
     }
-    console.error(`  ✓ Paired successfully (Telegram ID: ${tokens.telegram_id})`);
-    console.error("");
-    // Install MCP config
+    console.error("  ✓ Paired");
     installMcpConfig();
-    console.error("  ✓ MCP server config written to ~/.claude.json");
+    console.error("  ✓ MCP server configured");
+    installToolPermissions();
+    console.error("  ✓ Tool permissions set");
+    if (process.platform === "darwin") {
+        installLaunchAgent();
+        console.error("  ✓ Auto-start on login enabled");
+    }
     console.error("");
-    // Tool permissions
-    if (!toolPermissionsInstalled()) {
-        console.error("  ┌─────────────────────────────────────────────┐");
-        console.error("  │  Tool Permissions                           │");
-        console.error("  └─────────────────────────────────────────────┘");
-        console.error("");
-        console.error("  JPJ needs one tool to submit scores:");
-        console.error("");
-        console.error("    ✓ submit_scores  — Sends scores back, triggers Telegram alerts");
-        console.error("    ✓ check_jobs     — Manual fallback to fetch jobs (read-only)");
-        console.error("");
-        console.error("  Allowing these means Claude Code won't ask for");
-        console.error("  approval each time it scores jobs for you.");
-        console.error("");
-        const answer = await prompt("  Allow these tools? (y/n): ");
-        if (answer.toLowerCase() === "y" || answer.toLowerCase() === "yes") {
-            installToolPermissions();
-            console.error("  ✓ Tool permissions saved to ~/.claude/settings.json");
-        }
-        else {
-            console.error("  Skipped. You'll be prompted each time Claude uses JPJ tools.");
-        }
-        console.error("");
-    }
-    console.error("  Done! JPJ is now connected to Claude Code.");
+    console.error("  Launching Claude Code...");
     console.error("");
-    const startNow = await prompt("  Start scoring jobs now? (y/n): ");
-    if (startNow.toLowerCase() === "y" || startNow.toLowerCase() === "yes") {
-        console.error("");
-        console.error("  Launching Claude Code with Remote Control...");
-        if (process.platform === "darwin") {
-            console.error("  (caffeinate will keep your Mac awake)");
-        }
-        console.error("");
-        launchRemoteControl();
-    }
-    else {
-        // Offer auto-start on login
-        if (process.platform === "darwin") {
-            const autoStart = await prompt("  Start automatically on login instead? (y/n): ");
-            if (autoStart.toLowerCase() === "y" || autoStart.toLowerCase() === "yes") {
-                installLaunchAgent();
-                console.error("  ✓ Launch Agent installed — JPJ will start on login");
-                console.error("");
-                console.error("  To remove: launchctl unload ~/Library/LaunchAgents/com.jpj.channel.plist");
-            }
-            else {
-                console.error("");
-                console.error("  To start later, run:");
-                console.error("    claude remote-control --name \"JPJ Job Scoring\"");
-            }
-        }
-        else {
-            console.error("");
-            console.error("  To start later, run:");
-            console.error("    claude remote-control --name \"JPJ Job Scoring\"");
-        }
-        console.error("");
-    }
+    launchRemoteControl();
     return true;
 }
 // ================================================================
@@ -620,12 +570,13 @@ function isInteractiveTerminal() {
 async function main() {
     const args = process.argv.slice(2);
     const wantsPair = args.includes("--pair");
+    // Extract 6-digit code from args (e.g. npx github:markjrobby/jpj-channel 847291)
+    const codeArg = args.find((a) => /^\d{6}$/.test(a));
     const tokens = loadTokens();
     // If running interactively (user typed npx), show pairing flow
     if (isInteractiveTerminal()) {
-        if (!tokens || wantsPair) {
-            // No tokens or explicit --pair: run pairing
-            const success = await runPairingFlow();
+        if (!tokens || wantsPair || codeArg) {
+            const success = await runPairingFlow(codeArg);
             if (!success)
                 process.exit(1);
             process.exit(0);
@@ -642,33 +593,17 @@ async function main() {
                 process.exit(1);
             process.exit(0);
         }
-        console.error("  ✓ Already paired and session is valid.");
-        console.error("  ✓ MCP server is configured in ~/.claude.json");
-        if (!toolPermissionsInstalled()) {
-            console.error("");
-            console.error("  Tool permissions not yet configured.");
-            console.error("  JPJ needs these tools to run without approval prompts:");
-            console.error("");
-            console.error("    ✓ submit_scores  — Sends scores back, triggers Telegram alerts");
-            console.error("    ✓ check_jobs     — Manual fallback to fetch jobs (read-only)");
-            console.error("");
-            const answer = await prompt("  Allow these tools? (y/n): ");
-            if (answer.toLowerCase() === "y" || answer.toLowerCase() === "yes") {
-                installToolPermissions();
-                console.error("  ✓ Tool permissions saved to ~/.claude/settings.json");
-            }
-            else {
-                console.error("  Skipped. You'll be prompted each time Claude uses JPJ tools.");
-            }
-        }
-        else {
-            console.error("  ✓ Tool permissions configured.");
+        // Already paired — ensure everything is configured and launch
+        console.error("  ✓ Session valid");
+        installMcpConfig();
+        installToolPermissions();
+        if (process.platform === "darwin") {
+            installLaunchAgent();
         }
         console.error("");
-        console.error("  Jobs are scored automatically while Claude Code is running.");
-        console.error("  To start:    claude remote-control --name \"JPJ Job Scoring\"");
-        console.error("  To re-pair:  npx github:markjrobby/jpj-channel --pair");
+        console.error("  Launching Claude Code...");
         console.error("");
+        launchRemoteControl();
         process.exit(0);
     }
     // Non-interactive: launched by Claude Code as MCP server + channel
