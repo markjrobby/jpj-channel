@@ -4,6 +4,8 @@ AI-powered job scoring for [JustPostedJobs](https://t.me/justpostedjobs) via Cla
 
 Jobs matching your filters are automatically pushed to Claude, scored against your resume, and only the best matches are sent as Telegram alerts.
 
+> **This is open-source.** You can review every line of code before installing — see [`src/index.ts`](src/index.ts). For details on what data is sent where, see [Privacy & data](#privacy--data).
+
 ## Setup
 
 ### 1. Get a pairing code
@@ -45,6 +47,33 @@ npx github:markjrobby/jpj-channel --pair
 |------|-------------|
 | `check_jobs` | Manual fallback to fetch pending jobs (normally pushed automatically) |
 | `submit_scores` | Submit scores back to JPJ, triggering Telegram alerts |
+
+## Privacy & data
+
+This is fully open-source — you're reading it. Here's exactly what data goes where.
+
+**What stays on your machine:**
+- Your auth tokens (`~/.jpj-channel-auth.json`, owner-read-only)
+- Your Claude Code conversations and files
+- All scoring happens locally in your Claude Code session
+
+**What's sent to the JPJ server (`job-alert-api.onrender.com`):**
+- `check_jobs` / polling — your session token. Server returns your resume + pending jobs.
+- `submit_scores` — batch ID, job IDs, scores (0-100), actions (send/skip), match reasons (1-2 sentences). This triggers Telegram alerts for jobs you marked "send".
+
+**What's stored on the server:**
+- Your resume (uploaded via the Telegram bot, used for matching)
+- Your job filter preferences
+- Scores and match reasons you submit
+
+**What's NOT sent or stored:**
+- Your Claude Code conversation history
+- Your codebase or files
+- Any data from other MCP servers
+
+**Your data, your control:**
+- Send `/delete` to [@justpostedjobs_bot](https://t.me/justpostedjobs_bot) to delete your resume and all AI matching data
+- Uninstall anytime: `claude mcp remove jpj`
 
 ## Requirements
 
