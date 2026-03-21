@@ -10,6 +10,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as readline from "readline";
+import { spawn } from "child_process";
 
 // ================================================================
 // Config
@@ -310,13 +311,106 @@ async function runPairingFlow(): Promise<boolean> {
 
   console.error("  Done! JPJ is now connected to Claude Code.");
   console.error("");
-  console.error("  Jobs will be scored automatically while Claude Code");
-  console.error("  is running. No action needed — just leave it open.");
-  console.error("");
-  console.error("  Note: Requires Claude Code v2.1.80+ with channels enabled.");
-  console.error("");
+
+  const startNow = await prompt("  Start scoring jobs now? (y/n): ");
+
+  if (startNow.toLowerCase() === "y" || startNow.toLowerCase() === "yes") {
+    console.error("");
+    console.error("  Launching Claude Code with Remote Control...");
+    if (process.platform === "darwin") {
+      console.error("  (caffeinate will keep your Mac awake)");
+    }
+    console.error("");
+    launchRemoteControl();
+  } else {
+    // Offer auto-start on login
+    if (process.platform === "darwin") {
+      const autoStart = await prompt("  Start automatically on login instead? (y/n): ");
+
+      if (autoStart.toLowerCase() === "y" || autoStart.toLowerCase() === "yes") {
+        installLaunchAgent();
+        console.error("  ✓ Launch Agent installed — JPJ will start on login");
+        console.error("");
+        console.error("  To remove: launchctl unload ~/Library/LaunchAgents/com.jpj.channel.plist");
+      } else {
+        console.error("");
+        console.error("  To start later, run:");
+        console.error("    claude remote-control --name \"JPJ Job Scoring\"");
+      }
+    } else {
+      console.error("");
+      console.error("  To start later, run:");
+      console.error("    claude remote-control --name \"JPJ Job Scoring\"");
+    }
+    console.error("");
+  }
 
   return true;
+}
+
+// ================================================================
+// Launch helpers
+// ================================================================
+
+function launchRemoteControl(): void {
+  const args = process.platform === "darwin"
+    ? ["caffeinate", "-i", "claude", "remote-control", "--name", "JPJ Job Scoring"]
+    : ["claude", "remote-control", "--name", "JPJ Job Scoring"];
+
+  const cmd = args.shift()!;
+  const child = spawn(cmd, args, {
+    stdio: "inherit",
+    shell: true,
+    detached: true,
+  });
+
+  child.unref();
+
+  child.on("error", () => {
+    console.error("  Could not launch Claude Code.");
+    console.error("  Run manually: claude remote-control --name \"JPJ Job Scoring\"");
+    console.error("");
+  });
+}
+
+const LAUNCH_AGENT_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.jpj.channel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>claude</string>
+    <string>remote-control</string>
+    <string>--name</string>
+    <string>JPJ Job Scoring</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>StandardErrorPath</key>
+  <string>${os.homedir()}/Library/Logs/jpj-channel.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>`;
+
+const LAUNCH_AGENT_DIR = path.join(os.homedir(), "Library", "LaunchAgents");
+const LAUNCH_AGENT_FILE = path.join(LAUNCH_AGENT_DIR, "com.jpj.channel.plist");
+
+export function installLaunchAgent(): void {
+  if (!fs.existsSync(LAUNCH_AGENT_DIR)) {
+    fs.mkdirSync(LAUNCH_AGENT_DIR, { recursive: true });
+  }
+  fs.writeFileSync(LAUNCH_AGENT_FILE, LAUNCH_AGENT_PLIST, { encoding: "utf8" });
 }
 
 // ================================================================
@@ -660,7 +754,8 @@ async function main() {
 
     console.error("");
     console.error("  Jobs are scored automatically while Claude Code is running.");
-    console.error("  To re-pair: npx github:markjrobby/jpj-channel --pair");
+    console.error("  To start:    claude remote-control --name \"JPJ Job Scoring\"");
+    console.error("  To re-pair:  npx github:markjrobby/jpj-channel --pair");
     console.error("");
     process.exit(0);
   }

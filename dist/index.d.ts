@@ -21,3 +21,4 @@ export declare function refreshSession(tokens: AuthTokens): Promise<AuthTokens |
 export declare function installMcpConfig(): void;
 export declare function toolPermissionsInstalled(): boolean;
 export declare function installToolPermissions(): void;
+export declare function installLaunchAgent(): void;
