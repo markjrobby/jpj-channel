@@ -250,26 +250,24 @@ async function runPairingFlow(code) {
     console.error("");
     console.error("  Launching Claude Code...");
     console.error("");
-    launchRemoteControl();
+    launchClaudeCode();
     return true;
 }
 // ================================================================
 // Launch helpers
 // ================================================================
-function launchRemoteControl() {
-    const command = process.platform === "darwin"
-        ? "caffeinate -i claude remote-control --name 'JPJ Job Scoring'"
-        : "claude remote-control --name 'JPJ Job Scoring'";
-    const child = spawn(command, [], {
+function launchClaudeCode() {
+    const child = spawn("claude", ["--remote-control"], {
         stdio: "inherit",
         shell: true,
-        detached: true,
     });
-    child.unref();
     child.on("error", () => {
         console.error("  Could not launch Claude Code.");
-        console.error("  Run manually: claude remote-control --name \"JPJ Job Scoring\"");
+        console.error("  Run manually: claude --remote-control");
         console.error("");
+    });
+    child.on("exit", (code) => {
+        process.exit(code ?? 0);
     });
 }
 const LAUNCH_AGENT_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
@@ -281,9 +279,7 @@ const LAUNCH_AGENT_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
   <key>ProgramArguments</key>
   <array>
     <string>claude</string>
-    <string>remote-control</string>
-    <string>--name</string>
-    <string>JPJ Job Scoring</string>
+    <string>--remote-control</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -602,7 +598,7 @@ async function main() {
         console.error("");
         console.error("  Launching Claude Code...");
         console.error("");
-        launchRemoteControl();
+        launchClaudeCode();
         process.exit(0);
     }
     // Non-interactive: launched by Claude Code as MCP server + channel
