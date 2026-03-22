@@ -263,7 +263,6 @@ function launchRemoteControl() {
     const cmd = args.shift();
     const child = spawn(cmd, args, {
         stdio: "inherit",
-        shell: true,
         detached: true,
     });
     child.unref();
