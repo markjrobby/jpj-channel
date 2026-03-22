@@ -257,12 +257,12 @@ async function runPairingFlow(code) {
 // Launch helpers
 // ================================================================
 function launchRemoteControl() {
-    const args = process.platform === "darwin"
-        ? ["caffeinate", "-i", "claude", "remote-control", "--name", "JPJ Job Scoring"]
-        : ["claude", "remote-control", "--name", "JPJ Job Scoring"];
-    const cmd = args.shift();
-    const child = spawn(cmd, args, {
+    const command = process.platform === "darwin"
+        ? "caffeinate -i claude remote-control --name 'JPJ Job Scoring'"
+        : "claude remote-control --name 'JPJ Job Scoring'";
+    const child = spawn(command, [], {
         stdio: "inherit",
+        shell: true,
         detached: true,
     });
     child.unref();

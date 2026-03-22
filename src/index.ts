@@ -300,13 +300,13 @@ async function runPairingFlow(code?: string): Promise<boolean> {
 // ================================================================
 
 function launchRemoteControl(): void {
-  const args = process.platform === "darwin"
-    ? ["caffeinate", "-i", "claude", "remote-control", "--name", "JPJ Job Scoring"]
-    : ["claude", "remote-control", "--name", "JPJ Job Scoring"];
+  const command = process.platform === "darwin"
+    ? "caffeinate -i claude remote-control --name 'JPJ Job Scoring'"
+    : "claude remote-control --name 'JPJ Job Scoring'";
 
-  const cmd = args.shift()!;
-  const child = spawn(cmd, args, {
+  const child = spawn(command, [], {
     stdio: "inherit",
+    shell: true,
     detached: true,
   });
 
