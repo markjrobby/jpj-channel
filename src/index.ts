@@ -300,14 +300,14 @@ async function runPairingFlow(code?: string): Promise<boolean> {
 // ================================================================
 
 function launchClaudeCode(): void {
-  const child = spawn("claude", ["--remote-control"], {
+  const child = spawn("claude", [], {
     stdio: "inherit",
     shell: true,
   });
 
   child.on("error", () => {
     console.error("  Could not launch Claude Code.");
-    console.error("  Run manually: claude --remote-control");
+    console.error("  Run manually: claude");
     console.error("");
   });
 
@@ -325,7 +325,6 @@ const LAUNCH_AGENT_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
   <key>ProgramArguments</key>
   <array>
     <string>claude</string>
-    <string>--remote-control</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
