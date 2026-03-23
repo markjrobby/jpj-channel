@@ -69,6 +69,7 @@ This is fully open-source — you're reading it. Here's exactly what data goes w
 - Scores and match reasons you submit
 
 **What's NOT sent or stored:**
+- Your Claude subscription or API keys — never accessed, never stored
 - Your Claude Code conversation history
 - Your codebase or files
 - Any data from other MCP servers
