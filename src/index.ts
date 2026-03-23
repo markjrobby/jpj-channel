@@ -10,7 +10,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as readline from "readline";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 
 // ================================================================
 // Config
@@ -300,20 +300,12 @@ async function runPairingFlow(code?: string): Promise<boolean> {
 // ================================================================
 
 function launchClaudeCode(): void {
-  const child = spawn("claude", [], {
-    stdio: "inherit",
-    shell: true,
-  });
-
-  child.on("error", () => {
-    console.error("  Could not launch Claude Code.");
-    console.error("  Run manually: claude");
-    console.error("");
-  });
-
-  child.on("exit", (code) => {
-    process.exit(code ?? 0);
-  });
+  try {
+    execSync("claude", { stdio: "inherit" });
+  } catch {
+    // claude exited with non-zero or wasn't found
+  }
+  process.exit(0);
 }
 
 const LAUNCH_AGENT_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
