@@ -15,14 +15,16 @@ Send `/pair` to the [JPJ Telegram bot](https://t.me/justpostedjobs_bot).
 ### 2. Run the pairing command
 
 ```bash
-npx github:markjrobby/jpj-channel
+npx github:justpostedjobs/jpj-channel
 ```
 
 Enter the 6-digit code when prompted. This stores your auth tokens locally and configures Claude Code automatically.
 
 ### 3. That's it
 
-Jobs are scored automatically while Claude Code is running. No commands to run — just leave Claude Code open.
+Claude Code launches with channel notifications enabled. Jobs are scored automatically while Claude Code is running — no commands to run, just leave it open.
+
+> **Note:** JPJ uses Claude Code's [channels](https://code.claude.com/docs/en/channels) feature (research preview). During the preview, custom channels require the `--dangerously-load-development-channels` flag, which the pairing command sets up automatically. You'll see a one-time confirmation prompt when Claude Code starts — accept it to enable auto-scoring.
 
 ## How it works
 
@@ -38,7 +40,7 @@ Jobs are scored automatically while Claude Code is running. No commands to run �
 To re-pair with a new code:
 
 ```bash
-npx github:markjrobby/jpj-channel --pair
+npx github:justpostedjobs/jpj-channel --pair
 ```
 
 ## Tools
@@ -77,4 +79,6 @@ This is fully open-source — you're reading it. Here's exactly what data goes w
 
 ## Requirements
 
-- Claude Code v2.1.80+ with channels enabled
+- [Claude Code](https://code.claude.com) v2.1.80+ (channels support)
+- claude.ai login (Console/API key auth not supported for channels)
+- Node.js 18+ (for `npx`)

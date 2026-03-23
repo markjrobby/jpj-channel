@@ -125,7 +125,7 @@ async function fetchFeed(tokens: AuthTokens): Promise<any> {
   if (res.status === 401) {
     // Try refresh
     const refreshed = await refreshSession(tokens);
-    if (!refreshed) throw new Error("Session expired. Run `npx github:markjrobby/jpj-channel` to re-pair.");
+    if (!refreshed) throw new Error("Session expired. Run `npx github:justpostedjobs/jpj-channel` to re-pair.");
 
     const retry = await fetch(`${API_BASE}/api/channel/feed`, {
       headers: { Authorization: `Bearer ${refreshed.session_token}` },
@@ -201,7 +201,7 @@ export function installMcpConfig(): void {
 
   config.mcpServers["jpj"] = {
     command: "npx",
-    args: ["github:markjrobby/jpj-channel"],
+    args: ["github:justpostedjobs/jpj-channel"],
   };
 
   fs.writeFileSync(MCP_CONFIG_FILE, JSON.stringify(config, null, 2), {
@@ -530,7 +530,7 @@ function createServer(): Server {
         content: [
           {
             type: "text" as const,
-            text: "Not paired yet. Run `npx github:markjrobby/jpj-channel` in your terminal to pair with JPJ.",
+            text: "Not paired yet. Run `npx github:justpostedjobs/jpj-channel` in your terminal to pair with JPJ.",
           },
         ],
       };
@@ -640,7 +640,7 @@ function isInteractiveTerminal(): boolean {
 async function main() {
   const args = process.argv.slice(2);
   const wantsPair = args.includes("--pair");
-  // Extract 6-digit code from args (e.g. npx github:markjrobby/jpj-channel 847291)
+  // Extract 6-digit code from args (e.g. npx github:justpostedjobs/jpj-channel 847291)
   const codeArg = args.find((a) => /^\d{6}$/.test(a));
   const tokens = loadTokens();
 

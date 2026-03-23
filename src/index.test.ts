@@ -133,7 +133,7 @@ describe("installMcpConfig", () => {
     const result = JSON.parse(fs.readFileSync(mcpFile, "utf8"));
     assert.deepEqual(result.mcpServers["jpj"], {
       command: "npx",
-      args: ["github:markjrobby/jpj-channel"],
+      args: ["github:justpostedjobs/jpj-channel"],
     });
   });
 
@@ -162,7 +162,7 @@ describe("installMcpConfig", () => {
     // JPJ server added
     assert.deepEqual(result.mcpServers["jpj"], {
       command: "npx",
-      args: ["github:markjrobby/jpj-channel"],
+      args: ["github:justpostedjobs/jpj-channel"],
     });
   });
 
@@ -180,7 +180,7 @@ describe("installMcpConfig", () => {
     assert.equal(result.theme, "dark");
     assert.deepEqual(result.mcpServers["jpj"], {
       command: "npx",
-      args: ["github:markjrobby/jpj-channel"],
+      args: ["github:justpostedjobs/jpj-channel"],
     });
   });
 });
