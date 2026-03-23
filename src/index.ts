@@ -301,7 +301,9 @@ async function runPairingFlow(code?: string): Promise<boolean> {
 
 function launchClaudeCode(): void {
   try {
-    execSync("claude", { stdio: "inherit" });
+    execSync("claude --dangerously-load-development-channels server:jpj", {
+      stdio: "inherit",
+    });
   } catch {
     // claude exited with non-zero or wasn't found
   }
@@ -317,6 +319,8 @@ const LAUNCH_AGENT_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
   <key>ProgramArguments</key>
   <array>
     <string>claude</string>
+    <string>--dangerously-load-development-channels</string>
+    <string>server:jpj</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
