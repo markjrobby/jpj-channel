@@ -10,7 +10,7 @@ Jobs matching your filters are automatically pushed to Claude, scored against yo
 
 ### 1. Get a pairing code
 
-Send `/pair` to the [JPJ Telegram bot](https://t.me/justpostedjobs_bot).
+Send `/pair` to [@justpostedjobsbot](https://t.me/justpostedjobsbot) on Telegram.
 
 ### 2. Run the pairing command
 
@@ -74,7 +74,7 @@ This is fully open-source — you're reading it. Here's exactly what data goes w
 - Any data from other MCP servers
 
 **Your data, your control:**
-- Send `/delete` to [@justpostedjobs_bot](https://t.me/justpostedjobs_bot) to delete your resume and all AI matching data
+- Send `/delete` to [@justpostedjobsbot](https://t.me/justpostedjobsbot) on Telegram to delete your resume and all AI matching data
 - Uninstall anytime: `claude mcp remove jpj`
 
 ## Requirements
