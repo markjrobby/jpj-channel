@@ -390,10 +390,10 @@ New jobs arrive automatically as <channel> events. When you receive one:
 2. Score each job 0-100 based on fit with the resume
 3. Weight transferable skills and adjacent experience — don't penalise heavily for unfamiliar domains if core competencies align
 4. For borderline jobs (within 10 points of the threshold): lean toward sending, and explain why in match_reason
-5. Call submit_scores with the batch_id and all scores
+5. Call submit_scores with batch_id and matches array (NOT "scores" — the parameter is called "matches")
 
 Use action "send" for jobs at or above ai_threshold, "skip" otherwise.
-Each match needs: job_id, score (0-100), action ("send" or "skip"), match_reason (1-2 sentences, max 300 chars).
+Each match needs: job_id (integer), score (0-100), action ("send" or "skip"), match_reason (1-2 sentences, max 300 chars).
 
 Jobs you mark "send" are delivered as Telegram alerts. Jobs you "skip" are silently filtered.`;
 function createServer() {
