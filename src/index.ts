@@ -374,6 +374,82 @@ export function installLaunchAgent(workingDir: string): void {
 }
 
 // ================================================================
+// Reset: clean uninstall
+// ================================================================
+
+function removeJsonKey(filePath: string, section: string, key: string): boolean {
+  /** Remove a key from a nested object in a JSON file. Returns true if removed. */
+  try {
+    if (!fs.existsSync(filePath)) return false;
+    const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (data?.[section]?.[key]) {
+      delete data[section][key];
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), { encoding: "utf8" });
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+function runReset(): void {
+  console.error("");
+  console.error("  JPJ Channel — Reset");
+  console.error("  ====================");
+  console.error("");
+
+  // 1. Auth tokens
+  if (fs.existsSync(AUTH_FILE)) {
+    fs.unlinkSync(AUTH_FILE);
+    console.error("  ✓ Removed auth tokens");
+  } else {
+    console.error("  · No auth tokens found");
+  }
+
+  // 2. MCP config — project-level (.mcp.json in cwd)
+  const projectMcp = path.join(process.cwd(), ".mcp.json");
+  if (removeJsonKey(projectMcp, "mcpServers", "jpj")) {
+    console.error(`  ✓ Removed jpj from ${projectMcp}`);
+  }
+
+  // 3. MCP config — global (~/.claude.json, legacy)
+  const globalMcp = path.join(os.homedir(), ".claude.json");
+  if (removeJsonKey(globalMcp, "mcpServers", "jpj")) {
+    console.error("  ✓ Removed jpj from ~/.claude.json");
+  }
+
+  // 4. MCP config — global (~/.claude/mcp.json)
+  const globalMcp2 = path.join(os.homedir(), ".claude", "mcp.json");
+  if (removeJsonKey(globalMcp2, "mcpServers", "jpj")) {
+    console.error("  ✓ Removed jpj from ~/.claude/mcp.json");
+  }
+
+  // 5. Tool permissions
+  const settingsPath = SETTINGS_FILE;
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+      const allow: string[] = settings?.permissions?.allow ?? [];
+      const filtered = allow.filter((t: string) => !t.startsWith("mcp__jpj__"));
+      if (filtered.length < allow.length) {
+        settings.permissions.allow = filtered;
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), { encoding: "utf8" });
+        console.error("  ✓ Removed tool permissions");
+      }
+    }
+  } catch {}
+
+  // 6. LaunchAgent (macOS)
+  if (fs.existsSync(LAUNCH_AGENT_FILE)) {
+    fs.unlinkSync(LAUNCH_AGENT_FILE);
+    console.error("  ✓ Removed LaunchAgent");
+  }
+
+  console.error("");
+  console.error("  Done. Run `npx github:justpostedjobs/jpj-channel` to pair again.");
+  console.error("");
+}
+
+// ================================================================
 // Channel: Polling loop
 // ================================================================
 
@@ -664,9 +740,16 @@ function isInteractiveTerminal(): boolean {
 async function main() {
   const args = process.argv.slice(2);
   const wantsPair = args.includes("--pair");
+  const wantsReset = args.includes("--reset");
   // Extract 6-digit code from args (e.g. npx github:justpostedjobs/jpj-channel 847291)
   const codeArg = args.find((a) => /^\d{6}$/.test(a));
   const tokens = loadTokens();
+
+  // Handle --reset before anything else
+  if (wantsReset) {
+    runReset();
+    process.exit(0);
+  }
 
   // If running interactively (user typed npx), show pairing flow
   if (isInteractiveTerminal()) {
