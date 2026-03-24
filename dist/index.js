@@ -330,7 +330,7 @@ export function installLaunchAgent(workingDir) {
 // ================================================================
 // Reset: clean uninstall
 // ================================================================
-function removeJsonKey(filePath, section, key) {
+export function removeJsonKey(filePath, section, key) {
     /** Remove a key from a nested object in a JSON file. Returns true if removed. */
     try {
         if (!fs.existsSync(filePath))
@@ -345,7 +345,7 @@ function removeJsonKey(filePath, section, key) {
     catch { }
     return false;
 }
-function runReset() {
+export function runReset() {
     console.error("");
     console.error("  JPJ Channel — Reset");
     console.error("  ====================");
@@ -358,10 +358,9 @@ function runReset() {
     else {
         console.error("  · No auth tokens found");
     }
-    // 2. MCP config — project-level (.mcp.json in cwd)
-    const projectMcp = path.join(process.cwd(), ".mcp.json");
-    if (removeJsonKey(projectMcp, "mcpServers", "jpj")) {
-        console.error(`  ✓ Removed jpj from ${projectMcp}`);
+    // 2. MCP config — project-level (.mcp.json in cwd, or overridden via _setPaths)
+    if (removeJsonKey(MCP_CONFIG_FILE, "mcpServers", "jpj")) {
+        console.error(`  ✓ Removed jpj from ${MCP_CONFIG_FILE}`);
     }
     // 3. MCP config — global (~/.claude.json, legacy)
     const globalMcp = path.join(os.homedir(), ".claude.json");

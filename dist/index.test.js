@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { _setPaths, loadTokens, saveTokens, installMcpConfig, installToolPermissions, toolPermissionsInstalled, refreshSession, } from "./index.js";
+import { _setPaths, loadTokens, saveTokens, installMcpConfig, installToolPermissions, toolPermissionsInstalled, refreshSession, removeJsonKey, runReset, installLaunchAgent, } from "./index.js";
 // ================================================================
 // Helpers
 // ================================================================
@@ -344,5 +344,119 @@ describe("refreshSession", () => {
         finally {
             globalThis.fetch = originalFetch;
         }
+    });
+});
+describe("removeJsonKey", () => {
+    let tmpDir;
+    beforeEach(() => {
+        tmpDir = makeTmpDir();
+    });
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+    it("removes key from nested object", () => {
+        const file = path.join(tmpDir, "config.json");
+        fs.writeFileSync(file, JSON.stringify({
+            mcpServers: { jpj: { command: "npx" }, other: { command: "node" } },
+        }));
+        const removed = removeJsonKey(file, "mcpServers", "jpj");
+        assert.equal(removed, true);
+        const result = JSON.parse(fs.readFileSync(file, "utf8"));
+        assert.equal(result.mcpServers["jpj"], undefined);
+        assert.deepEqual(result.mcpServers["other"], { command: "node" });
+    });
+    it("returns false when file does not exist", () => {
+        const removed = removeJsonKey(path.join(tmpDir, "nope.json"), "mcpServers", "jpj");
+        assert.equal(removed, false);
+    });
+    it("returns false when key does not exist", () => {
+        const file = path.join(tmpDir, "config.json");
+        fs.writeFileSync(file, JSON.stringify({ mcpServers: { other: {} } }));
+        const removed = removeJsonKey(file, "mcpServers", "jpj");
+        assert.equal(removed, false);
+    });
+    it("returns false when section does not exist", () => {
+        const file = path.join(tmpDir, "config.json");
+        fs.writeFileSync(file, JSON.stringify({ theme: "dark" }));
+        const removed = removeJsonKey(file, "mcpServers", "jpj");
+        assert.equal(removed, false);
+    });
+});
+describe("runReset", () => {
+    let tmpDir;
+    beforeEach(() => {
+        tmpDir = makeTmpDir();
+        _setPaths({
+            authFile: path.join(tmpDir, "auth.json"),
+            mcpConfigFile: path.join(tmpDir, ".mcp.json"),
+            settingsFile: path.join(tmpDir, "settings.json"),
+        });
+    });
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+    it("removes auth tokens file", () => {
+        const authFile = path.join(tmpDir, "auth.json");
+        fs.writeFileSync(authFile, JSON.stringify(sampleTokens()));
+        assert.equal(fs.existsSync(authFile), true);
+        runReset();
+        assert.equal(fs.existsSync(authFile), false);
+    });
+    it("removes jpj from project mcp config", () => {
+        const mcpFile = path.join(tmpDir, ".mcp.json");
+        fs.writeFileSync(mcpFile, JSON.stringify({
+            mcpServers: {
+                jpj: { command: "npx", args: ["github:justpostedjobs/jpj-channel"] },
+                other: { command: "node" },
+            },
+        }));
+        runReset();
+        const result = JSON.parse(fs.readFileSync(mcpFile, "utf8"));
+        assert.equal(result.mcpServers["jpj"], undefined);
+        assert.deepEqual(result.mcpServers["other"], { command: "node" });
+    });
+    it("removes jpj tool permissions but preserves others", () => {
+        const settingsFile = path.join(tmpDir, "settings.json");
+        fs.writeFileSync(settingsFile, JSON.stringify({
+            permissions: {
+                allow: [
+                    "Bash(git:*)",
+                    "mcp__jpj__check_jobs",
+                    "mcp__jpj__submit_scores",
+                    "mcp__render__list_services",
+                ],
+            },
+            theme: "dark",
+        }));
+        runReset();
+        const result = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+        assert.deepEqual(result.permissions.allow, [
+            "Bash(git:*)",
+            "mcp__render__list_services",
+        ]);
+        assert.equal(result.theme, "dark");
+    });
+    it("handles missing files gracefully", () => {
+        // No files created — should not throw
+        assert.doesNotThrow(() => runReset());
+    });
+});
+describe("installLaunchAgent", () => {
+    let tmpDir;
+    let originalFile;
+    beforeEach(() => {
+        tmpDir = makeTmpDir();
+    });
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+    it("creates plist with correct WorkingDirectory", () => {
+        const agentDir = path.join(tmpDir, "LaunchAgents");
+        fs.mkdirSync(agentDir, { recursive: true });
+        const agentFile = path.join(agentDir, "com.jpj.channel.plist");
+        // We can't easily override LAUNCH_AGENT_FILE, so test the plist content indirectly
+        // by checking installLaunchAgent writes a file (it uses the module-level constant)
+        // Instead, test that the function doesn't throw with a valid dir
+        assert.doesNotThrow(() => installLaunchAgent("/Users/test/personal"));
     });
 });

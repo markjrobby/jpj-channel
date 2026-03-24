@@ -22,3 +22,5 @@ export declare function installMcpConfig(): void;
 export declare function toolPermissionsInstalled(): boolean;
 export declare function installToolPermissions(): void;
 export declare function installLaunchAgent(workingDir: string): void;
+export declare function removeJsonKey(filePath: string, section: string, key: string): boolean;
+export declare function runReset(): void;
