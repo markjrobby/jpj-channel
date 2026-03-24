@@ -18,7 +18,7 @@ import { spawn, execSync } from "child_process";
 
 export const API_BASE = "https://job-alert-api.onrender.com";
 export let AUTH_FILE = path.join(os.homedir(), ".jpj-channel-auth.json");
-export let MCP_CONFIG_FILE = path.join(os.homedir(), ".claude.json");
+export let MCP_CONFIG_FILE = path.join(process.cwd(), ".mcp.json");
 export let SETTINGS_FILE = path.join(os.homedir(), ".claude", "settings.json");
 
 /** Override file paths (for testing only) */
@@ -278,13 +278,33 @@ async function runPairingFlow(code?: string): Promise<boolean> {
 
   console.error("  ✓ Paired");
   installMcpConfig();
-  console.error("  ✓ MCP server configured");
   installToolPermissions();
   console.error("  ✓ Tool permissions set");
 
+  const cwd = process.cwd();
+  console.error("");
+  console.error(`  JPJ is now configured for this directory:`);
+  console.error(`    ${cwd}`);
+  console.error("");
+  console.error("  Job alerts will only appear when you run `claude` from here.");
+  console.error("  Sessions started from other directories won't be affected.");
+
   if (process.platform === "darwin") {
-    installLaunchAgent();
-    console.error("  ✓ Auto-start on login enabled");
+    console.error("");
+    const autostart = await prompt("  Start JPJ automatically on login? (y/n): ");
+    if (autostart.toLowerCase() === "y" || autostart.toLowerCase() === "yes") {
+      installLaunchAgent(cwd);
+      console.error("  ✓ Auto-start on login enabled");
+    } else {
+      console.error("  Skipped auto-start. Run JPJ anytime with:");
+      console.error("");
+      console.error(`    cd ${cwd} && npx github:justpostedjobs/jpj-channel`);
+      console.error("");
+      console.error("  Tip: add an alias to your shell profile:");
+      console.error("");
+      console.error(`    alias jpj='cd ${cwd} && npx github:justpostedjobs/jpj-channel'`);
+      console.error("");
+    }
   }
 
   console.error("");
@@ -310,7 +330,8 @@ function launchClaudeCode(): void {
   process.exit(0);
 }
 
-const LAUNCH_AGENT_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
+function buildLaunchAgentPlist(workingDir: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -322,6 +343,8 @@ const LAUNCH_AGENT_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
     <string>--dangerously-load-development-channels</string>
     <string>server:jpj</string>
   </array>
+  <key>WorkingDirectory</key>
+  <string>${workingDir}</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -338,15 +361,16 @@ const LAUNCH_AGENT_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
   </dict>
 </dict>
 </plist>`;
+}
 
 const LAUNCH_AGENT_DIR = path.join(os.homedir(), "Library", "LaunchAgents");
 const LAUNCH_AGENT_FILE = path.join(LAUNCH_AGENT_DIR, "com.jpj.channel.plist");
 
-export function installLaunchAgent(): void {
+export function installLaunchAgent(workingDir: string): void {
   if (!fs.existsSync(LAUNCH_AGENT_DIR)) {
     fs.mkdirSync(LAUNCH_AGENT_DIR, { recursive: true });
   }
-  fs.writeFileSync(LAUNCH_AGENT_FILE, LAUNCH_AGENT_PLIST, { encoding: "utf8" });
+  fs.writeFileSync(LAUNCH_AGENT_FILE, buildLaunchAgentPlist(workingDir), { encoding: "utf8" });
 }
 
 // ================================================================
@@ -670,10 +694,8 @@ async function main() {
     installMcpConfig();
     installToolPermissions();
 
-    if (process.platform === "darwin") {
-      installLaunchAgent();
-    }
-
+    const cwd = process.cwd();
+    console.error(`  JPJ active for: ${cwd}`);
     console.error("");
     console.error("  Launching Claude Code...");
     console.error("");
