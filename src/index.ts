@@ -17,7 +17,7 @@ import { spawn, execSync } from "child_process";
 // ================================================================
 
 export const API_BASE = "https://job-alert-api.onrender.com";
-export let AUTH_FILE = path.join(os.homedir(), ".jpj-channel-auth.json");
+export let AUTH_FILE = path.join(process.cwd(), ".jpj-channel-auth.json");
 export let MCP_CONFIG_FILE = path.join(process.cwd(), ".mcp.json");
 export let SETTINGS_FILE = path.join(os.homedir(), ".claude", "settings.json");
 
@@ -189,6 +189,19 @@ function prompt(question: string): Promise<string> {
   });
 }
 
+export function ensureGitignored(entry: string): void {
+  const gitignorePath = path.join(process.cwd(), ".gitignore");
+  try {
+    if (fs.existsSync(gitignorePath)) {
+      const content = fs.readFileSync(gitignorePath, "utf8");
+      if (content.split("\n").some((line) => line.trim() === entry)) return;
+      fs.appendFileSync(gitignorePath, `\n${entry}\n`);
+    } else {
+      fs.writeFileSync(gitignorePath, `${entry}\n`, { encoding: "utf8" });
+    }
+  } catch {}
+}
+
 export function installMcpConfig(): void {
   let config: any = {};
   if (fs.existsSync(MCP_CONFIG_FILE)) {
@@ -279,6 +292,7 @@ async function runPairingFlow(code?: string): Promise<boolean> {
   console.error("  ✓ Paired");
   installMcpConfig();
   installToolPermissions();
+  ensureGitignored(".jpj-channel-auth.json");
   console.error("  ✓ Tool permissions set");
 
   const cwd = process.cwd();
@@ -397,13 +411,18 @@ export function runReset(): void {
   console.error("  ====================");
   console.error("");
 
-  // 1. Auth tokens
+  // 1. Auth tokens — remove project-scoped and any leftover global file
+  let removedAuth = false;
   if (fs.existsSync(AUTH_FILE)) {
     fs.unlinkSync(AUTH_FILE);
-    console.error("  ✓ Removed auth tokens");
-  } else {
-    console.error("  · No auth tokens found");
+    removedAuth = true;
   }
+  const globalAuthFile = path.join(os.homedir(), ".jpj-channel-auth.json");
+  if (fs.existsSync(globalAuthFile)) {
+    fs.unlinkSync(globalAuthFile);
+    removedAuth = true;
+  }
+  console.error(removedAuth ? "  ✓ Removed auth tokens" : "  · No auth tokens found");
 
   // 2. MCP config — project-level (.mcp.json in cwd, or overridden via _setPaths)
   if (removeJsonKey(MCP_CONFIG_FILE, "mcpServers", "jpj")) {
@@ -775,6 +794,7 @@ async function main() {
     console.error("  ✓ Session valid");
     installMcpConfig();
     installToolPermissions();
+    ensureGitignored(".jpj-channel-auth.json");
 
     const cwd = process.cwd();
     console.error(`  JPJ active for: ${cwd}`);
